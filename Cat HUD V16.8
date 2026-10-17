@@ -1,0 +1,651 @@
+--[[
+	Cat HUD V16.8 - Ultimate Stable & Teleport Version
+	- เน้นความเสถียรสูงสุด (Stability First)
+	- รวมฟังก์ชัน: Fly, God, Noclip, InfJump, Advanced ESP, Fullbright, Item Spawner, Player Teleport
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPack = game:GetService("StarterPack")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- State
+local State = {
+	FlySpeed = 60,
+	GodMode = false,
+	Fly = false,
+	Noclip = false,
+	InfJump = false,
+	ESP = false,
+	Fullbright = false,
+	Minimized = false
+}
+
+local Conn = {}
+local BV, BG
+local EspDrawings = {}
+
+local DefaultLighting = {
+	Brightness = Lighting.Brightness,
+	ClockTime = Lighting.ClockTime,
+	FogEnd = Lighting.FogEnd,
+	GlobalShadows = Lighting.GlobalShadows,
+	OutdoorAmbient = Lighting.OutdoorAmbient
+}
+
+-- ลบของเก่าอย่างปลอดภัย
+pcall(function()
+	local old = CoreGui:FindFirstChild("CatHUD")
+	if old then old:Destroy() end
+end)
+pcall(function()
+	local old = LocalPlayer.PlayerGui:FindFirstChild("CatHUD")
+	if old then old:Destroy() end
+end)
+
+-- Helpers
+local function Dis(name)
+	if Conn[name] then
+		pcall(function() Conn[name]:Disconnect() end)
+		Conn[name] = nil
+	end
+end
+
+local function Hum()
+	local c = LocalPlayer.Character
+	if not c then return nil end
+	return c:FindFirstChildOfClass("Humanoid")
+end
+
+local function Root()
+	local c = LocalPlayer.Character
+	if not c then return nil end
+	return c:FindFirstChild("HumanoidRootPart")
+end
+
+-- ==================== GUI SETUP ====================
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "CatHUD"
+Gui.ResetOnSpawn = false
+Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local ok = pcall(function() Gui.Parent = CoreGui end)
+if not ok then 
+	pcall(function() Gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
+end
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 180, 0, 280)
+Main.Position = UDim2.new(0, 15, 0.3, 0)
+Main.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.ClipsDescendants = true
+Main.Parent = Gui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(60, 170, 255)
+Stroke.Thickness = 1.4
+Stroke.Parent = Main
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+Title.Text = "  🐱 Cat HUD V16.8"
+Title.TextColor3 = Color3.fromRGB(130, 210, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
+
+-- ปุ่มย่อ/ขยาย
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 22, 0, 22)
+MinBtn.Position = UDim2.new(1, -26, 0, 4)
+MinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+MinBtn.Text = "-"
+MinBtn.TextColor3 = Color3.new(1, 1, 1)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 12
+MinBtn.Parent = Title
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 5)
+
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Size = UDim2.new(1, -8, 1, -36)
+Scroll.Position = UDim2.new(0, 4, 0, 32)
+Scroll.BackgroundTransparency = 1
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 310)
+Scroll.ScrollBarThickness = 3
+Scroll.Parent = Main
+
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0, 5)
+Layout.Parent = Scroll
+
+MinBtn.MouseButton1Click:Connect(function()
+	State.Minimized = not State.Minimized
+	if State.Minimized then
+		Scroll.Visible = false
+		Main.Size = UDim2.new(0, 180, 0, 30)
+		MinBtn.Text = "+"
+		MinBtn.BackgroundColor3 = Color3.fromRGB(25, 130, 190)
+	else
+		Scroll.Visible = true
+		Main.Size = UDim2.new(0, 180, 0, 280)
+		MinBtn.Text = "-"
+		MinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+	end
+end)
+
+local function Btn(txt)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 26)
+	b.BackgroundColor3 = Color3.fromRGB(34, 34, 44)
+	b.TextColor3 = Color3.new(1, 1, 1)
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.Text = txt
+	b.Parent = Scroll
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+	return b
+end
+
+-- ==================== 1. FLY ====================
+local function StopFly()
+	State.Fly = false
+	Dis("Fly")
+	pcall(function()
+		if BV then BV:Destroy() BV = nil end
+		if BG then BG:Destroy() BG = nil end
+		local h = Hum()
+		if h then h.PlatformStand = false end
+	end)
+end
+
+local function StartFly()
+	StopFly()
+	pcall(function()
+		local r, h = Root(), Hum()
+		if not r or not h then return end
+		State.Fly = true
+		h.PlatformStand = true
+		
+		BV = Instance.new("BodyVelocity")
+		BV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+		BV.Velocity = Vector3.zero
+		BV.Parent = r
+
+		BG = Instance.new("BodyGyro")
+		BG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+		BG.P = 2000
+		BG.Parent = r
+
+		Conn["Fly"] = RunService.RenderStepped:Connect(function()
+			if not State.Fly then return end
+			pcall(function()
+				local rr, hh = Root(), Hum()
+				if not rr or not hh then StopFly() return end
+				local move = Vector3.zero
+				local dir = hh.MoveDirection
+				if dir.Magnitude > 0 then
+					local rel = Camera.CFrame:VectorToObjectSpace(dir)
+					move = Camera.CFrame.LookVector * -rel.Z + Camera.CFrame.RightVector * rel.X
+				end
+				if UIS:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.yAxis end
+				if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then move -= Vector3.yAxis end
+				BV.Velocity = move.Magnitude > 0 and move.Unit * State.FlySpeed or Vector3.zero
+				BG.CFrame = Camera.CFrame
+			end)
+		end)
+	end)
+end
+
+local flyBtn = Btn("บิน: ปิด")
+flyBtn.MouseButton1Click:Connect(function()
+	if State.Fly then
+		StopFly()
+		flyBtn.Text = "บิน: ปิด"
+		flyBtn.BackgroundColor3 = Color3.fromRGB(34, 34, 44)
+	else
+		StartFly()
+		flyBtn.Text = "บิน: เปิด"
+		flyBtn.BackgroundColor3 = Color3.fromRGB(25, 130, 190)
+	end
+end)
+
+-- ==================== 2. GOD MODE ====================
+local godBtn = Btn("อมตะ: ปิด")
+godBtn.MouseButton1Click:Connect(function()
+	State.GodMode = not State.GodMode
+	godBtn.Text = State.GodMode and "อมตะ: เปิด" or "อมตะ: ปิด"
+	godBtn.BackgroundColor3 = State.GodMode and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(34, 34, 44)
+end)
+
+Dis("God")
+Conn["God"] = RunService.Heartbeat:Connect(function()
+	if not State.GodMode then return end
+	pcall(function()
+		local h = Hum()
+		if h and h.Health > 0 and h.Health < h.MaxHealth then
+			h.Health = h.MaxHealth
+		end
+	end)
+end)
+
+-- ==================== 3. NOCLIP ====================
+local noclipBtn = Btn("ทะลุกำแพง: ปิด")
+noclipBtn.MouseButton1Click:Connect(function()
+	State.Noclip = not State.Noclip
+	noclipBtn.Text = State.Noclip and "ทะลุกำแพง: เปิด" or "ทะลุกำแพง: ปิด"
+	noclipBtn.BackgroundColor3 = State.Noclip and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(34, 34, 44)
+end)
+
+Dis("Noclip")
+Conn["Noclip"] = RunService.Stepped:Connect(function()
+	if not State.Noclip then return end
+	pcall(function()
+		local c = LocalPlayer.Character
+		if c then
+			for _, p in ipairs(c:GetDescendants()) do
+				if p:IsA("BasePart") then p.CanCollide = false end
+			end
+		end
+	end)
+end)
+
+-- ==================== 4. INF JUMP ====================
+local jumpBtn = Btn("กระโดดกลางอากาศ: ปิด")
+jumpBtn.MouseButton1Click:Connect(function()
+	State.InfJump = not State.InfJump
+	jumpBtn.Text = State.InfJump and "กระโดดกลางอากาศ: เปิด" or "กระโดดกลางอากาศ: ปิด"
+	jumpBtn.BackgroundColor3 = State.InfJump and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(34, 34, 44)
+end)
+
+Dis("Jump")
+Conn["Jump"] = UIS.JumpRequest:Connect(function()
+	if State.InfJump then
+		pcall(function()
+			local h = Hum()
+			if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+		end)
+	end
+end)
+
+-- ==================== 5. ADVANCED ESP ====================
+local espBtn = Btn("ESP (ชื่อ/เลือด): ปิด")
+
+local function removeESP(plr)
+	pcall(function()
+		if EspDrawings[plr] then
+			if EspDrawings[plr].Billboard then EspDrawings[plr].Billboard:Destroy() end
+			EspDrawings[plr] = nil
+		end
+	end)
+end
+
+local function addESP(plr)
+	if plr == LocalPlayer then return end
+	pcall(function()
+		local function setup(char)
+			removeESP(plr)
+			local head = char:WaitForChild("Head", 3)
+			local hum = char:WaitForChild("Humanoid", 3)
+			local root = char:WaitForChild("HumanoidRootPart", 3)
+			if not head or not hum or not root then return end
+
+			local hl = Instance.new("Highlight")
+			hl.Name = "CatESP_HL"
+			hl.FillColor = Color3.fromRGB(0, 170, 255)
+			hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+			hl.FillTransparency = 0.5
+			hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			hl.Parent = char
+
+			local bg = Instance.new("BillboardGui")
+			bg.Name = "CatESP_UI"
+			bg.Size = UDim2.new(0, 150, 0, 50)
+			bg.StudsOffset = Vector3.new(0, 2.5, 0)
+			bg.AlwaysOnTop = true
+			bg.Parent = char
+
+			local txtLabel = Instance.new("TextLabel")
+			txtLabel.Size = UDim2.new(1, 0, 1, 0)
+			txtLabel.BackgroundTransparency = 1
+			txtLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			txtLabel.TextStrokeTransparency = 0
+			txtLabel.Font = Enum.Font.GothamBold
+			txtLabel.TextSize = 11
+			txtLabel.Parent = bg
+
+			EspDrawings[plr] = { Billboard = bg }
+
+			local conn
+			conn = RunService.RenderStepped:Connect(function()
+				if not State.ESP or not char or not char.Parent or hum.Health <= 0 then
+					bg.Enabled = false
+					hl.Enabled = false
+					if not State.ESP then conn:Disconnect() end
+					return
+				end
+				bg.Enabled = true
+				hl.Enabled = true
+
+				local myRoot = Root()
+				local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
+				local hp = math.floor(hum.Health)
+				local maxHp = math.floor(hum.MaxHealth)
+
+				txtLabel.Text = string.format("%s\n❤️ %d/%d | 📏 %dm", plr.DisplayName, hp, maxHp, dist)
+			end)
+		end
+		if plr.Character then setup(plr.Character) end
+		plr.CharacterAdded:Connect(setup)
+		plr.CharacterRemoving:Connect(function() removeESP(plr) end)
+	end)
+end
+
+espBtn.MouseButton1Click:Connect(function()
+	State.ESP = not State.ESP
+	espBtn.Text = State.ESP and "ESP (ชื่อ/เลือด): เปิด" or "ESP (ชื่อ/เลือด): ปิด"
+	espBtn.BackgroundColor3 = State.ESP and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(34, 34, 44)
+
+	if State.ESP then
+		for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
+		Dis("ESPAdd")
+		Conn["ESPAdd"] = Players.PlayerAdded:Connect(addESP)
+		Dis("ESPRemove")
+		Conn["ESPRemove"] = Players.PlayerRemoving:Connect(removeESP)
+	else
+		Dis("ESPAdd")
+		Dis("ESPRemove")
+		for _, p in ipairs(Players:GetPlayers()) do removeESP(p) end
+	end
+end)
+
+-- ==================== 6. FULLBRIGHT ====================
+local fbBtn = Btn("เปิดแสงสว่าง: ปิด")
+fbBtn.MouseButton1Click:Connect(function()
+	State.Fullbright = not State.Fullbright
+	fbBtn.Text = State.Fullbright and "เปิดแสงสว่าง: เปิด" or "เปิดแสงสว่าง: ปิด"
+	fbBtn.BackgroundColor3 = State.Fullbright and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(34, 34, 44)
+	
+	Dis("Fullbright")
+	if State.Fullbright then
+		Conn["Fullbright"] = RunService.RenderStepped:Connect(function()
+			pcall(function()
+				Lighting.Brightness = 2
+				Lighting.ClockTime = 14
+				Lighting.FogEnd = 100000
+				Lighting.GlobalShadows = false
+				Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+			end)
+		end)
+	else
+		pcall(function()
+			Lighting.Brightness = DefaultLighting.Brightness
+			Lighting.ClockTime = DefaultLighting.ClockTime
+			Lighting.FogEnd = DefaultLighting.FogEnd
+			Lighting.GlobalShadows = DefaultLighting.GlobalShadows
+			Lighting.OutdoorAmbient = DefaultLighting.OutdoorAmbient
+		end)
+	end
+end)
+
+-- ==================== 7. ITEM SPAWNER ====================
+local spawnBtn = Btn("เปิดหน้าเสกไอเทม")
+
+local SFrame = Instance.new("Frame")
+SFrame.Size = UDim2.new(0, 200, 0, 260)
+SFrame.Position = UDim2.new(0, 195, 0.3, 0)
+SFrame.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+SFrame.Visible = false
+SFrame.Active = true
+SFrame.Draggable = true
+SFrame.Parent = Gui
+Instance.new("UICorner", SFrame).CornerRadius = UDim.new(0, 10)
+
+local SStroke = Instance.new("UIStroke")
+SStroke.Color = Color3.fromRGB(150, 90, 255)
+SStroke.Thickness = 1.4
+SStroke.Parent = SFrame
+
+local STitle = Instance.new("TextLabel")
+STitle.Size = UDim2.new(1, 0, 0, 30)
+STitle.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+STitle.Text = "  เสกไอเทม"
+STitle.TextColor3 = Color3.fromRGB(190, 160, 255)
+STitle.Font = Enum.Font.GothamBold
+STitle.TextSize = 12
+STitle.TextXAlignment = Enum.TextXAlignment.Left
+STitle.Parent = SFrame
+Instance.new("UICorner", STitle).CornerRadius = UDim.new(0, 10)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Position = UDim2.new(1, -25, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(170, 45, 45)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 11
+CloseBtn.Parent = STitle
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
+CloseBtn.MouseButton1Click:Connect(function() SFrame.Visible = false end)
+
+local Search = Instance.new("TextBox")
+Search.Size = UDim2.new(1, -8, 0, 24)
+Search.Position = UDim2.new(0, 4, 0, 34)
+Search.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+Search.TextColor3 = Color3.new(1, 1, 1)
+Search.PlaceholderText = "ค้นหา..."
+Search.Text = ""
+Search.Font = Enum.Font.Gotham
+Search.TextSize = 11
+Search.Parent = SFrame
+Instance.new("UICorner", Search).CornerRadius = UDim.new(0, 6)
+
+local IScroll = Instance.new("ScrollingFrame")
+IScroll.Size = UDim2.new(1, -8, 1, -64)
+IScroll.Position = UDim2.new(0, 4, 0, 62)
+IScroll.BackgroundTransparency = 1
+IScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+IScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+IScroll.ScrollBarThickness = 3
+IScroll.Parent = SFrame
+
+local IList = Instance.new("UIListLayout")
+IList.Padding = UDim.new(0, 3)
+IList.Parent = IScroll
+
+local function Give(tool)
+	pcall(function()
+		if not tool or not tool:IsA("Tool") then return end
+		local clone = tool:Clone()
+		for _, d in ipairs(clone:GetDescendants()) do
+			if d:IsA("LocalScript") then d.Disabled = false end
+		end
+		local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
+		if bp then clone.Parent = bp elseif LocalPlayer.Character then clone.Parent = LocalPlayer.Character end
+	end)
+end
+
+local function LoadItems(filter)
+	pcall(function()
+		for _, c in ipairs(IScroll:GetChildren()) do
+			if c:IsA("TextButton") then c:Destroy() end
+		end
+		local added = {}
+		local sources = {workspace, ReplicatedStorage, StarterPack}
+		for _, src in ipairs(sources) do
+			pcall(function()
+				for _, v in ipairs(src:GetDescendants()) do
+					if v:IsA("Tool") and not added[v.Name] then
+						if filter == "" or string.find(string.lower(v.Name), string.lower(filter), 1, true) then
+							added[v.Name] = true
+							local b = Instance.new("TextButton")
+							b.Size = UDim2.new(1, -2, 0, 24)
+							b.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+							b.TextColor3 = Color3.new(1, 1, 1)
+							b.Font = Enum.Font.Gotham
+							b.TextSize = 11
+							b.Text = "  " .. v.Name
+							b.TextXAlignment = Enum.TextXAlignment.Left
+							b.Parent = IScroll
+							Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+							b.MouseButton1Click:Connect(function()
+								Give(v)
+								b.BackgroundColor3 = Color3.fromRGB(35, 150, 80)
+								b.Text = "  ✓ ได้แล้ว"
+								task.delay(0.6, function()
+									if b and b.Parent then
+										b.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+										b.Text = "  " .. v.Name
+									end
+								end)
+							end)
+						end
+					end
+				end
+			end)
+		end
+	end)
+end
+
+Search:GetPropertyChangedSignal("Text"):Connect(function() LoadItems(Search.Text) end)
+spawnBtn.MouseButton1Click:Connect(function()
+	SFrame.Visible = not SFrame.Visible
+	if SFrame.Visible then LoadItems("") end
+end)
+
+-- ==================== 8. ULTRA STABLE TELEPORT SYSTEM ====================
+local tpBtn = Btn("เปิดหน้าระบบวาร์ป")
+
+local TFrame = Instance.new("Frame")
+TFrame.Size = UDim2.new(0, 200, 0, 260)
+TFrame.Position = UDim2.new(0, 195, 0.45, 0)
+TFrame.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+TFrame.Visible = false
+TFrame.Active = true
+TFrame.Draggable = true
+TFrame.Parent = Gui
+Instance.new("UICorner", TFrame).CornerRadius = UDim.new(0, 10)
+
+local TStroke = Instance.new("UIStroke")
+TStroke.Color = Color3.fromRGB(50, 205, 50)
+TStroke.Thickness = 1.4
+TStroke.Parent = TFrame
+
+local TTitle = Instance.new("TextLabel")
+TTitle.Size = UDim2.new(1, 0, 0, 30)
+TTitle.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+TTitle.Text = "  🎯 ระบบวาร์ปผู้เล่น"
+TTitle.TextColor3 = Color3.fromRGB(100, 255, 100)
+TTitle.Font = Enum.Font.GothamBold
+TTitle.TextSize = 12
+TTitle.TextXAlignment = Enum.TextXAlignment.Left
+TTitle.Parent = TFrame
+Instance.new("UICorner", TTitle).CornerRadius = UDim.new(0, 10)
+
+local TCloseBtn = Instance.new("TextButton")
+TCloseBtn.Size = UDim2.new(0, 22, 0, 22)
+TCloseBtn.Position = UDim2.new(1, -25, 0, 4)
+TCloseBtn.BackgroundColor3 = Color3.fromRGB(170, 45, 45)
+TCloseBtn.Text = "X"
+TCloseBtn.TextColor3 = Color3.new(1, 1, 1)
+TCloseBtn.Font = Enum.Font.GothamBold
+TCloseBtn.TextSize = 11
+TCloseBtn.Parent = TTitle
+Instance.new("UICorner", TCloseBtn).CornerRadius = UDim.new(0, 5)
+TCloseBtn.MouseButton1Click:Connect(function() TFrame.Visible = false end)
+
+local TScroll = Instance.new("ScrollingFrame")
+TScroll.Size = UDim2.new(1, -8, 1, -36)
+TScroll.Position = UDim2.new(0, 4, 0, 32)
+TScroll.BackgroundTransparency = 1
+TScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+TScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+TScroll.ScrollBarThickness = 3
+TScroll.Parent = TFrame
+
+local TList = Instance.new("UIListLayout")
+TList.Padding = UDim.new(0, 3)
+TList.Parent = TScroll
+
+local function SafeTeleport(targetPlr)
+	pcall(function()
+		if not targetPlr or not targetPlr.Character then return end
+		local targetRoot = targetPlr.Character:FindFirstChild("HumanoidRootPart")
+		local targetHum = targetPlr.Character:FindFirstChildOfClass("Humanoid")
+		local myRoot = Root()
+		
+		if targetRoot and targetHum and targetHum.Health > 0 and myRoot then
+			myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+		end
+	end)
+end
+
+local function RefreshPlayerList()
+	pcall(function()
+		for _, c in ipairs(TScroll:GetChildren()) do
+			if c:IsA("TextButton") then c:Destroy() end
+		end
+		
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer then
+				local b = Instance.new("TextButton")
+				b.Size = UDim2.new(1, -2, 0, 24)
+				b.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+				b.TextColor3 = Color3.new(1, 1, 1)
+				b.Font = Enum.Font.Gotham
+				b.TextSize = 11
+				b.Text = "  👤 " .. p.DisplayName
+				b.TextXAlignment = Enum.TextXAlignment.Left
+				b.Parent = TScroll
+				Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+
+				b.MouseButton1Click:Connect(function()
+					SafeTeleport(p)
+					b.BackgroundColor3 = Color3.fromRGB(35, 150, 80)
+					b.Text = "  ✓ วาร์ปแล้ว!"
+					task.delay(0.6, function()
+						if b and b.Parent then
+							b.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+							b.Text = "  👤 " .. p.DisplayName
+						end
+					end)
+				end)
+			end
+		end
+	end)
+end
+
+Players.PlayerAdded:Connect(RefreshPlayerList)
+Players.PlayerRemoving:Connect(RefreshPlayerList)
+
+tpBtn.MouseButton1Click:Connect(function()
+	TFrame.Visible = not TFrame.Visible
+	if TFrame.Visible then RefreshPlayerList() end
+end)
+
+-- Toggle Menu ด้วยปุ่ม H
+UIS.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode.H then
+		Main.Visible = not Main.Visible
+		if not Main.Visible then 
+			SFrame.Visible = false 
+			TFrame.Visible = false
+		end
+	end
+end)
+
+print("✅ Cat HUD V16.8 Ultimate Stable Loaded")
