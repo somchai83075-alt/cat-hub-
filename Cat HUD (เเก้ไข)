@@ -1,0 +1,575 @@
+--[[
+	Cat HUD - Masterpiece Ultimate Complete Edition
+	(UI เดิม 100% | ระบบหลักครบ | ล่องหนเนียนจริงกล้องไม่ตก | วาร์ปปลอดภัย | เสกของ V3 Ultra ปลดล็อกยิง)
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPack = game:GetService("StarterPack")
+local StarterGui = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local State = {
+	WS = 16, JP = 50, FS = 50,
+	GM = false, FL = false, NC = false, IJ = false,
+	FB = false, ESP = false, INV = false,
+	IsMinimized = false
+}
+
+local Conn = {}
+local BV, BG
+local EspDrawings = {}
+
+local DefaultLighting = {
+	Brightness = Lighting.Brightness,
+	ClockTime = Lighting.ClockTime,
+	FogEnd = Lighting.FogEnd,
+	GlobalShadows = Lighting.GlobalShadows,
+	OutdoorAmbient = Lighting.OutdoorAmbient
+}
+
+-- 1. เคลียร์ UI เก่าออกก่อน
+pcall(function()
+	if game:GetService("CoreGui"):FindFirstChild("CatHUD_Sidebar") then game:GetService("CoreGui").CatHUD_Sidebar:Destroy() end
+	if LocalPlayer.PlayerGui:FindFirstChild("CatHUD_Sidebar") then LocalPlayer.PlayerGui.CatHUD_Sidebar:Destroy() end
+end)
+
+local function Dis(name)
+	if Conn[name] then
+		pcall(function() Conn[name]:Disconnect() end)
+		Conn[name] = nil
+	end
+end
+
+local function Hum()
+	local ok, h = pcall(function() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") end)
+	return ok and h or nil
+end
+
+local function Root()
+	local ok, r = pcall(function() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") end)
+	return ok and r or nil
+end
+
+-- ==================== 2. สร้างหน้าต่าง GUI หลัก ====================
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "CatHUD_Sidebar"
+Gui.ResetOnSpawn = false
+Gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local Main = Instance.new("Frame", Gui)
+Main.Size = UDim2.fromOffset(420, 280)
+Main.Position = UDim2.new(0.5, -210, 0.35, -140)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+Main.BackgroundTransparency = 0.15
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.ClipsDescendants = true
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
+
+local Stroke = Instance.new("UIStroke", Main)
+Stroke.Color = Color3.fromRGB(130, 80, 220)
+Stroke.Thickness = 1.4
+
+local TitleBar = Instance.new("Frame", Main)
+TitleBar.Size = UDim2.new(1, 0, 0, 32)
+TitleBar.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+TitleBar.BackgroundTransparency = 0.3
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 8)
+
+local Title = Instance.new("TextLabel", TitleBar)
+Title.Size = UDim2.new(1, -65, 1, 0)
+Title.Position = UDim2.fromOffset(10, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "  🐱 Cat HUD"
+Title.TextColor3 = Color3.fromRGB(180, 140, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local MinBtn = Instance.new("TextButton", TitleBar)
+MinBtn.Size = UDim2.fromOffset(24, 24)
+MinBtn.Position = UDim2.new(1, -56, 0, 4)
+MinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+MinBtn.Text = "-"
+MinBtn.TextColor3 = Color3.new(1, 1, 1)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 5)
+
+local CloseBtn = Instance.new("TextButton", TitleBar)
+CloseBtn.Size = UDim2.fromOffset(24, 24)
+CloseBtn.Position = UDim2.new(1, -28, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(170, 45, 45)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
+
+local Sidebar = Instance.new("ScrollingFrame", Main)
+Sidebar.Size = UDim2.new(0, 115, 1, -42)
+Sidebar.Position = UDim2.fromOffset(6, 36)
+Sidebar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+Sidebar.BackgroundTransparency = 0.4
+Sidebar.BorderSizePixel = 0
+Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+Sidebar.ScrollBarThickness = 2
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 6)
+
+local SidebarLayout = Instance.new("UIListLayout", Sidebar)
+SidebarLayout.Padding = UDim.new(0, 4)
+SidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	Sidebar.CanvasSize = UDim2.new(0, 0, 0, SidebarLayout.AbsoluteContentSize.Y)
+end)
+
+local ContentContainer = Instance.new("Frame", Main)
+ContentContainer.Size = UDim2.new(1, -130, 1, -42)
+ContentContainer.Position = UDim2.fromOffset(125, 36)
+ContentContainer.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+ContentContainer.BackgroundTransparency = 0.4
+ContentContainer.BorderSizePixel = 0
+Instance.new("UICorner", ContentContainer).CornerRadius = UDim.new(0, 6)
+
+MinBtn.MouseButton1Click:Connect(function()
+	State.IsMinimized = not State.IsMinimized
+	if State.IsMinimized then
+		Sidebar.Visible = false
+		ContentContainer.Visible = false
+		Main.Size = UDim2.fromOffset(420, 32)
+		MinBtn.Text = "+"
+	else
+		Sidebar.Visible = true
+		ContentContainer.Visible = true
+		Main.Size = UDim2.fromOffset(420, 280)
+		MinBtn.Text = "-"
+	end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function() Gui:Destroy() end)
+
+local tabs, pages = {}, {}
+local function CreateTab(name)
+	local TabButton = Instance.new("TextButton", Sidebar)
+	TabButton.Size = UDim2.new(1, -4, 0, 30)
+	TabButton.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+	TabButton.TextColor3 = Color3.fromRGB(170, 170, 180)
+	TabButton.Text = name
+	TabButton.TextSize = 11
+	TabButton.Font = Enum.Font.GothamMedium
+	Instance.new("UICorner", TabButton).CornerRadius = UDim.new(0, 5)
+
+	local Page = Instance.new("ScrollingFrame", ContentContainer)
+	Page.Size = UDim2.new(1, -8, 1, -8)
+	Page.Position = UDim2.fromOffset(4, 4)
+	Page.BackgroundTransparency = 1
+	Page.Visible = false
+	Page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	Page.ScrollBarThickness = 3
+
+	local PageLayout = Instance.new("UIListLayout", Page)
+	PageLayout.Padding = UDim.new(0, 5)
+	PageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		Page.CanvasSize = UDim2.new(0, 0, 0, PageLayout.AbsoluteContentSize.Y + 10)
+	end)
+
+	table.insert(tabs, TabButton)
+	table.insert(pages, Page)
+	local index = #tabs
+
+	TabButton.MouseButton1Click:Connect(function()
+		for i, btn in ipairs(tabs) do
+			btn.BackgroundColor3 = (i == index) and Color3.fromRGB(80, 45, 150) or Color3.fromRGB(32, 32, 44)
+			btn.TextColor3 = (i == index) and Color3.new(1, 1, 1) or Color3.fromRGB(170, 170, 180)
+			pages[i].Visible = (i == index)
+		end
+	end)
+
+	if index == 1 then
+		TabButton.BackgroundColor3 = Color3.fromRGB(80, 45, 150)
+		TabButton.TextColor3 = Color3.new(1, 1, 1)
+		Page.Visible = true
+	end
+	return Page
+end
+
+local function AddBtn(tab, txt, cb)
+	local b = Instance.new("TextButton", tab)
+	b.Size = UDim2.new(1, -4, 0, 26)
+	b.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+	b.TextColor3 = Color3.new(1, 1, 1)
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.Text = txt
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+	b.MouseButton1Click:Connect(function() pcall(function() cb(b) end) end)
+	return b
+end
+
+local function AddInput(tab, ph, cb)
+	local t = Instance.new("TextBox", tab)
+	t.Size = UDim2.new(1, -4, 0, 26)
+	t.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+	t.TextColor3 = Color3.new(1, 1, 1)
+	t.PlaceholderText = ph
+	t.Text = ""
+	t.Font = Enum.Font.Gotham
+	t.TextSize = 11
+	t.ClearTextOnFocus = false
+	Instance.new("UICorner", t).CornerRadius = UDim.new(0, 5)
+	t.FocusLost:Connect(function() pcall(function() cb(t.Text) end) end)
+	return t
+end
+
+local TabMain = CreateTab("ระบบหลัก")
+local TabVisual = CreateTab("ภาพ/ESP")
+local TabPlayer = CreateTab("ผู้เล่น/วาร์ป")
+local TabItem = CreateTab("เสกของ")
+
+-- ==================== 3. ระบบหลัก (พร้อมล่องหนเนียนจริง กล้องไม่ตก) ====================
+AddInput(TabMain, "ความเร็วเดิน (ปกติ 16)", function(txt) local n = tonumber(txt) if n then State.WS = n end end)
+AddInput(TabMain, "แรงกระโดด (ปกติ 50)", function(txt) local n = tonumber(txt) if n then State.JP = n end end)
+AddInput(TabMain, "ความเร็วบิน (ปกติ 50)", function(txt) local n = tonumber(txt) if n then State.FS = n end end)
+
+RunService.RenderStepped:Connect(function()
+	pcall(function()
+		local h = Hum()
+		if h and h.Parent then
+			h.WalkSpeed = State.WS
+			if h.UseJumpPower then h.JumpPower = State.JP else h.JumpHeight = State.JP / 3.2 end
+		end
+	end)
+end)
+
+local function StopFly()
+	State.FL = false
+	Dis("Fly")
+	pcall(function()
+		if BV then BV:Destroy() BV = nil end
+		if BG then BG:Destroy() BG = nil end
+		local h = Hum() if h then h.PlatformStand = false end
+	end)
+end
+
+local function StartFly()
+	StopFly()
+	local r, h = Root(), Hum()
+	if not r or not h then return end
+	State.FL = true
+	h.PlatformStand = true
+	BV = Instance.new("BodyVelocity", r)
+	BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	BV.Velocity = Vector3.zero
+	BG = Instance.new("BodyGyro", r)
+	BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	BG.P = 3000
+	
+	task.spawn(function()
+		while State.FL do
+			pcall(function()
+				local rr, hh = Root(), Hum()
+				if not rr or not hh then StopFly() return end
+				local move = Vector3.zero
+				local dir = hh.MoveDirection
+				if dir.Magnitude > 0 then
+					local rel = Camera.CFrame:VectorToObjectSpace(dir)
+					move = Camera.CFrame.LookVector * -rel.Z + Camera.CFrame.RightVector * rel.X
+				end
+				if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+				if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
+				BV.Velocity = move.Magnitude > 0 and (move.Unit * State.FS) or Vector3.zero
+				BG.CFrame = CFrame.new(rr.Position, rr.Position + Camera.CFrame.LookVector)
+			end)
+			RunService.RenderStepped:Wait()
+		end
+	end)
+end
+
+AddBtn(TabMain, "บิน: ปิด", function(btn)
+	if State.FL then
+		StopFly()
+		btn.Text = "บิน: ปิด"
+		btn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+	else
+		StartFly()
+		btn.Text = "บิน: เปิด"
+		btn.BackgroundColor3 = Color3.fromRGB(25, 130, 190)
+	end
+end)
+
+AddBtn(TabMain, "อมตะ: ปิด", function(btn)
+	State.GM = not State.GM
+	btn.Text = State.GM and "อมตะ: เปิด" or "อมตะ: ปิด"
+	btn.BackgroundColor3 = State.GM and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+end)
+
+RunService.Heartbeat:Connect(function()
+	if not State.GM then return end
+	pcall(function() local h = Hum() if h and h.Parent then h.MaxHealth = math.huge h.Health = math.huge end end)
+end)
+
+AddBtn(TabMain, "ทะลุกำแพง: ปิด", function(btn)
+	State.NC = not State.NC
+	btn.Text = State.NC and "ทะลุกำแพง: เปิด" or "ทะลุกำแพง: ปิด"
+	btn.BackgroundColor3 = State.NC and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+end)
+
+RunService.Stepped:Connect(function()
+	if not State.NC then return end
+	pcall(function() local c = LocalPlayer.Character if c then for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end end end)
+end)
+
+AddBtn(TabMain, "กระโดดกลางอากาศ: ปิด", function(btn)
+	State.IJ = not State.IJ
+	btn.Text = State.IJ and "กระโดดกลางอากาศ: เปิด" or "กระโดดกลางอากาศ: ปิด"
+	btn.BackgroundColor3 = State.IJ and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if State.IJ then pcall(function() local h = Hum() if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end end) end
+end)
+
+-- ระบบล่องหน Real FE (ซ่อนตัวใต้โลก แต่ล็อกมุมกล้องให้อยู่บนพื้นปกติ)
+local invisConn = nil
+AddBtn(TabMain, "ล่องหน (คนอื่นไม่เห็น): ปิด", function(btn)
+	State.INV = not State.INV
+	btn.Text = State.INV and "ล่องหน (คนอื่นไม่เห็น): เปิด" or "ล่องหน (คนอื่นไม่เห็น): ปิด"
+	btn.BackgroundColor3 = State.INV and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+	
+	local char = LocalPlayer.Character
+	local root = Root()
+	local hum = Hum()
+	if not char or not root or not hum then return end
+
+	if State.INV then
+		pcall(function()
+			for _, v in ipairs(char:GetDescendants()) do
+				if v:IsA("BasePart") or v:IsA("Decal") then v.Transparency = 0.5
+				elseif v:IsA("Accessory") then local h = v:FindFirstChild("Handle") if h then h.Transparency = 0.5 end end
+			end
+		end)
+
+		invisConn = RunService.Heartbeat:Connect(function()
+			if not State.INV or not char.Parent or hum.Health <= 0 then
+				if invisConn then invisConn:Disconnect() end
+				return
+			end
+			pcall(function()
+				local camCF = Camera.CFrame
+				local oldCF = root.CFrame
+				root.CFrame = oldCF * CFrame.new(0, -10000, 0)
+				RunService.RenderStepped:Wait()
+				root.CFrame = oldCF
+				Camera.CFrame = camCF
+			end)
+		end)
+	else
+		if invisConn then invisConn:Disconnect() invisConn = nil end
+		pcall(function()
+			for _, v in ipairs(char:GetDescendants()) do
+				if v:IsA("BasePart") or v:IsA("Decal") then v.Transparency = 0
+				elseif v:IsA("Accessory") then local h = v:FindFirstChild("Handle") if h then h.Transparency = 0 end end
+			end
+		end)
+	end
+end)
+
+-- ==================== 4. ภาพ / ESP ====================
+AddBtn(TabVisual, "เปิดแสงสว่าง: ปิด", function(btn)
+	State.FB = not State.FB
+	btn.Text = State.FB and "เปิดแสงสว่าง: เปิด" or "เปิดแสงสว่าง: ปิด"
+	btn.BackgroundColor3 = State.FB and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+	if State.FB then
+		Lighting.Brightness = 2
+		Lighting.ClockTime = 14
+		Lighting.FogEnd = 100000
+		Lighting.GlobalShadows = false
+		Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+	else
+		Lighting.Brightness = DefaultLighting.Brightness
+		Lighting.ClockTime = DefaultLighting.ClockTime
+		Lighting.FogEnd = DefaultLighting.FogEnd
+		Lighting.GlobalShadows = DefaultLighting.GlobalShadows
+		Lighting.OutdoorAmbient = DefaultLighting.OutdoorAmbient
+	end
+end)
+
+local function removeESP(plr)
+	pcall(function()
+		if EspDrawings[plr] then
+			if EspDrawings[plr].Billboard then EspDrawings[plr].Billboard:Destroy() end
+			if EspDrawings[plr].Highlight then EspDrawings[plr].Highlight:Destroy() end
+			EspDrawings[plr] = nil
+		end
+	end)
+end
+
+local function addESP(plr)
+	if plr == LocalPlayer then return end
+	pcall(function()
+		local function setup(char)
+			removeESP(plr)
+			local head = char:WaitForChild("Head", 3)
+			local hum = char:WaitForChild("Humanoid", 3)
+			local root = char:WaitForChild("HumanoidRootPart", 3)
+			if not head or not hum or not root then return end
+
+			local hl = Instance.new("Highlight")
+			hl.Name = "CatESP_HL"
+			hl.FillColor = Color3.fromRGB(0, 170, 255)
+			hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+			hl.FillTransparency = 0.5
+			hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			hl.Parent = char
+
+			local bg = Instance.new("BillboardGui")
+			bg.Name = "CatESP_UI"
+			bg.Size = UDim2.new(0, 150, 0, 50)
+			bg.StudsOffset = Vector3.new(0, 2.5, 0)
+			bg.AlwaysOnTop = true
+			bg.Adornee = head
+			bg.Parent = char
+
+			local txtLabel = Instance.new("TextLabel", bg)
+			txtLabel.Size = UDim2.new(1, 0, 1, 0)
+			txtLabel.BackgroundTransparency = 1
+			txtLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			txtLabel.TextStrokeTransparency = 0
+			txtLabel.Font = Enum.Font.GothamBold
+			txtLabel.TextSize = 11
+
+			EspDrawings[plr] = { Billboard = bg, Highlight = hl }
+
+			local conn
+			conn = RunService.RenderStepped:Connect(function()
+				if not State.ESP or not char.Parent or hum.Health <= 0 then
+					bg.Enabled = false
+					hl.Enabled = false
+					if not State.ESP then conn:Disconnect() end
+					return
+				end
+				bg.Enabled = true
+				hl.Enabled = true
+				local myRoot = Root()
+				local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
+				txtLabel.Text = string.format("%s\n❤️ %d/%d | 📏 %dm", plr.DisplayName, math.floor(hum.Health), math.floor(hum.MaxHealth), dist)
+			end)
+		end
+		if plr.Character then setup(plr.Character) end
+		plr.CharacterAdded:Connect(setup)
+		plr.CharacterRemoving:Connect(function() removeESP(plr) end)
+	end)
+end
+
+AddBtn(TabVisual, "ESP (ชื่อ/เลือด): ปิด", function(btn)
+	State.ESP = not State.ESP
+	btn.Text = State.ESP and "ESP (ชื่อ/เลือด): เปิด" or "ESP (ชื่อ/เลือด): ปิด"
+	btn.BackgroundColor3 = State.ESP and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+	if State.ESP then
+		for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
+		Players.PlayerAdded:Connect(addESP)
+		Players.PlayerRemoving:Connect(removeESP)
+	else
+		for _, p in ipairs(Players:GetPlayers()) do removeESP(p) end
+	end
+end)
+
+-- ==================== 5. ผู้เล่น / วาร์ป (ระบบ Safe Teleport ป้องกันดีด) ====================
+pcall(function()
+	local SearchBox = AddInput(TabPlayer, "🔍 ค้นหาชื่อผู้เล่น...", function() end)
+	local listHolder = Instance.new("ScrollingFrame", TabPlayer)
+	listHolder.Size = UDim2.new(1, -4, 0, 140)
+	listHolder.BackgroundTransparency = 1
+	listHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
+	listHolder.ScrollBarThickness = 2
+
+	local listLayout = Instance.new("UIListLayout", listHolder)
+	listLayout.Padding = UDim.new(0, 4)
+	listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		listHolder.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+	end)
+
+	local function SafeTP(targetPlr)
+		pcall(function()
+			if not targetPlr or not targetPlr.Character then return end
+			local targetRoot = targetPlr.Character:FindFirstChild("HumanoidRootPart")
+			local myRoot = Root()
+			local hum = Hum()
+			
+			if targetRoot and myRoot then
+				myRoot.AssemblyLinearVelocity = Vector3.zero
+				myRoot.AssemblyAngularVelocity = Vector3.zero
+				myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 3, 3)
+				if hum then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+			end
+		end)
+	end
+
+	local function RefreshList()
+		pcall(function()
+			for _, c in ipairs(listHolder:GetChildren()) do
+				if c:IsA("Frame") then c:Destroy() end
+			end
+			local filter = string.lower(SearchBox.Text)
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= LocalPlayer then
+					local dName = p.DisplayName
+					local uName = p.Name
+					if filter == "" or string.find(string.lower(dName .. " " .. uName), filter, 1, true) then
+						local item = Instance.new("Frame", listHolder)
+						item.Size = UDim2.new(1, 0, 0, 36)
+						item.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+						Instance.new("UICorner", item).CornerRadius = UDim.new(0, 5)
+
+						local lbl = Instance.new("TextLabel", item)
+						lbl.Size = UDim2.new(1, -50, 1, 0)
+						lbl.Position = UDim2.new(0, 6, 0, 0)
+						lbl.BackgroundTransparency = 1
+						lbl.TextColor3 = Color3.new(1, 1, 1)
+						lbl.Font = Enum.Font.Gotham
+						lbl.TextSize = 10
+						lbl.Text = string.format("👤 %s\n@%s", dName, uName)
+						lbl.TextXAlignment = Enum.TextXAlignment.Left
+
+						local tp = Instance.new("TextButton", item)
+						tp.Size = UDim2.new(0, 42, 0, 24)
+						tp.Position = UDim2.new(1, -46, 0, 6)
+						tp.BackgroundColor3 = Color3.fromRGB(40, 140, 70)
+						tp.TextColor3 = Color3.new(1, 1, 1)
+						tp.Font = Enum.Font.GothamBold
+						tp.TextSize = 10
+						tp.Text = "วาร์ป"
+						Instance.new("UICorner", tp).CornerRadius = UDim.new(0, 4)
+						tp.MouseButton1Click:Connect(function() SafeTP(p) end)
+					end
+				end
+			end
+		end)
+	end
+
+	SearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshList)
+	Players.PlayerAdded:Connect(RefreshList)
+	Players.PlayerRemoving:Connect(RefreshList)
+	RefreshList()
+end)
+
+-- ==================== 6. เสกของ V3 Ultra (สแกนลึก + ปลดล็อกยิง) ====================
+pcall(function()
+	local SearchItem = AddInput(TabItem, "🔍 ค้นหาไอเทม (สแกนลึก V3 Ultra)...", function() end)
+	local itemHolder = Instance.new("ScrollingFrame", TabItem)
+	itemHolder.Size = UDim2.new(1, -4, 0, 150)
+	itemHolder.BackgroundTransparency = 1
+	itemHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
+	itemHolder.ScrollBarThickness = 2
+
+	local itemLayout = Instance.new("UIListLayout", itemHolder)
+	itemLayout.Padding = UDim.new(0, 4)
+	itemLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		itemHolder.CanvasSize = UDim2.new(0, 0, 0, itemLayout.AbsoluteCont
