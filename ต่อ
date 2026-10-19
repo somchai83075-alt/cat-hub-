@@ -1,0 +1,302 @@
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "NPCESP_Billboard"
+	billboard.Size = UDim2.new(0, 150, 0, 40)
+	billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = root
+	billboard.Parent = Gui
+	npcCleanup:Add(billboard)
+
+	local txtLabel = Instance.new("TextLabel", billboard)
+	txtLabel.Size = UDim2.new(1, 0, 1, 0)
+	txtLabel.BackgroundTransparency = 1
+	txtLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	txtLabel.TextStrokeTransparency = 0
+	txtLabel.Font = Enum.Font.GothamBold
+	txtLabel.TextSize = 11
+
+	npcCleanup:Add(RunService.RenderStepped:Connect(function()
+		if not State.ESP_NPC or not model.Parent or humanoid.Health <= 0 then
+			billboard.Enabled = false
+			highlight.Enabled = false
+			return
+		end
+		billboard.Enabled = true
+		highlight.Enabled = true
+		local myRoot = Root()
+		local dist = myRoot and math.floor((myRoot.Position - root.Position).Magnitude) or 0
+		txtLabel.Text = string.format("👾 NPC\n❤️ %d/%d | 📏 %dm", math.floor(humanoid.Health), math.floor(humanoid.MaxHealth), dist)
+	end))
+
+	npcRecords[model] = { cleanup = npcCleanup }
+end
+
+AddBtn(TabVisual, "ESP (NPC มอนสเตอร์): ปิด", function(btn)
+	State.ESP_NPC = not State.ESP_NPC
+	btn.Text = State.ESP_NPC and "ESP (NPC มอนสเตอร์): เปิด" or "ESP (NPC มอนสเตอร์): ปิด"
+	btn.BackgroundColor3 = State.ESP_NPC and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+	
+	if State.ESP_NPC then
+		for _, descendant in ipairs(Workspace:GetDescendants()) do
+			if descendant:IsA("Model") and descendant:FindFirstChildOfClass("Humanoid") then
+				addNPC(descendant)
+			end
+		end
+		RootCleanup:Add(Workspace.DescendantAdded:Connect(function(descendant)
+			if descendant:IsA("Model") and descendant:FindFirstChildOfClass("Humanoid") then
+				task.wait(0.5)
+				addNPC(descendant)
+			end
+		end))
+	else
+		for model, _ in pairs(npcRecords) do
+			removeNPC(model)
+		end
+	end
+end)
+
+-- ==================== Item / Container Deep Scan System ====================
+local itemRecords = {}
+
+local function removeItemESP(obj)
+	local record = itemRecords[obj]
+	if not record then return end
+	if record.cleanup then record.cleanup:Destroy() end
+	itemRecords[obj] = nil
+end
+
+local function addItemESP(obj)
+	if not obj or not obj.Parent or itemRecords[obj] then return end
+	local primaryPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)) or (obj:IsA("BasePart") and obj)
+	if not primaryPart then return end
+
+	local itemCleanup = Cleanup.new()
+	RootCleanup:Add(itemCleanup)
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "ItemESP_Highlight"
+	highlight.Adornee = obj
+	highlight.FillColor = Color3.fromRGB(255, 215, 0)
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.5
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = Gui
+	itemCleanup:Add(highlight)
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "ItemESP_Billboard"
+	billboard.Size = UDim2.new(0, 120, 0, 30)
+	billboard.StudsOffset = Vector3.new(0, 1.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = primaryPart
+	billboard.Parent = Gui
+	itemCleanup:Add(billboard)
+
+	local txtLabel = Instance.new("TextLabel", billboard)
+	txtLabel.Size = UDim2.new(1, 0, 1, 0)
+	txtLabel.BackgroundTransparency = 1
+	txtLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+	txtLabel.TextStrokeTransparency = 0
+	txtLabel.Font = Enum.Font.GothamBold
+	txtLabel.TextSize = 10
+
+	itemCleanup:Add(RunService.RenderStepped:Connect(function()
+		if not State.ESP_Item or not obj.Parent then
+			billboard.Enabled = false
+			highlight.Enabled = false
+			return
+		end
+		billboard.Enabled = true
+		highlight.Enabled = true
+		local myRoot = Root()
+		local dist = myRoot and math.floor((myRoot.Position - primaryPart.Position).Magnitude) or 0
+		txtLabel.Text = string.format("📦 %s (%dm)", obj.Name, dist)
+	end))
+
+	itemRecords[obj] = { cleanup = itemCleanup }
+end
+
+AddBtn(TabVisual, "ESP (สแกนกล่อง/ตู้/ไอเทม): ปิด", function(btn)
+	State.ESP_Item = not State.ESP_Item
+	btn.Text = State.ESP_Item and "ESP (สแกนกล่อง/ตู้/ไอเทม): เปิด" or "ESP (สแกนกล่อง/ตู้/ไอเทม): ปิด"
+	btn.BackgroundColor3 = State.ESP_Item and Color3.fromRGB(25, 130, 190) or Color3.fromRGB(35, 35, 48)
+
+	if State.ESP_Item then
+		for _, descendant in ipairs(Workspace:GetDescendants()) do
+			if descendant:IsA("Tool") or descendant.Name:lower():find("chest") or descendant.Name:lower():find("box") or descendant.Name:lower():find("closet") or descendant.Name:lower():find("item") then
+				addItemESP(descendant)
+			end
+		end
+		RootCleanup:Add(Workspace.DescendantAdded:Connect(function(descendant)
+			if descendant:IsA("Tool") or descendant.Name:lower():find("chest") or descendant.Name:lower():find("box") or descendant.Name:lower():find("closet") or descendant.Name:lower():find("item") then
+				addItemESP(descendant)
+			end
+		end))
+	else
+		for obj, _ in pairs(itemRecords) do
+			removeItemESP(obj)
+		end
+	end
+end)
+
+-- ==================== Player / Warp System ====================
+pcall(function()
+	local SearchBox = AddInput(TabPlayer, "🔍 ค้นหาชื่อผู้เล่น...", function() end)
+	local listHolder = Instance.new("ScrollingFrame", TabPlayer)
+	listHolder.Size = UDim2.new(1, -4, 0, 140)
+	listHolder.BackgroundTransparency = 1
+	listHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
+	listHolder.ScrollBarThickness = 2
+
+	local listLayout = Instance.new("UIListLayout", listHolder)
+	listLayout.Padding = UDim.new(0, 4)
+	listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		listHolder.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+	end)
+
+	local function SafeTP(targetPlr)
+		pcall(function()
+			if not targetPlr or not targetPlr.Character then return end
+			local targetRoot = targetPlr.Character:FindFirstChild("HumanoidRootPart")
+			local myRoot = Root()
+			local hum = Hum()
+			
+			if targetRoot and myRoot then
+				myRoot.AssemblyLinearVelocity = Vector3.zero
+				myRoot.AssemblyAngularVelocity = Vector3.zero
+				myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 3, 3)
+				if hum then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+			end
+		end)
+	end
+
+	local function RefreshList()
+		pcall(function()
+			for _, c in ipairs(listHolder:GetChildren()) do
+				if c:IsA("Frame") then c:Destroy() end
+			end
+			local filter = string.lower(SearchBox.Text)
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= LocalPlayer then
+					local dName = p.DisplayName
+					local uName = p.Name
+					if filter == "" or string.find(string.lower(dName .. " " .. uName), filter, 1, true) then
+						local item = Instance.new("Frame", listHolder)
+						item.Size = UDim2.new(1, 0, 0, 36)
+						item.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+						Instance.new("UICorner", item).CornerRadius = UDim.new(0, 5)
+
+						local lbl = Instance.new("TextLabel", item)
+						lbl.Size = UDim2.new(1, -50, 1, 0)
+						lbl.Position = UDim2.new(0, 6, 0, 0)
+						lbl.BackgroundTransparency = 1
+						lbl.TextColor3 = Color3.new(1, 1, 1)
+						lbl.Font = Enum.Font.Gotham
+						lbl.TextSize = 10
+						lbl.Text = string.format("👤 %s\n@%s", dName, uName)
+						lbl.TextXAlignment = Enum.TextXAlignment.Left
+
+						local tp = Instance.new("TextButton", item)
+						tp.Size = UDim2.new(0, 42, 0, 24)
+						tp.Position = UDim2.new(1, -46, 0, 6)
+						tp.BackgroundColor3 = Color3.fromRGB(40, 140, 70)
+						tp.TextColor3 = Color3.new(1, 1, 1)
+						tp.Font = Enum.Font.GothamBold
+						tp.TextSize = 10
+						tp.Text = "วาร์ป"
+						Instance.new("UICorner", tp).CornerRadius = UDim.new(0, 4)
+						tp.MouseButton1Click:Connect(function() SafeTP(p) end)
+					end
+				end
+			end
+		end)
+	end
+
+	RootCleanup:Add(SearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshList))
+	RootCleanup:Add(Players.PlayerAdded:Connect(RefreshList))
+	RootCleanup:Add(Players.PlayerRemoving:Connect(RefreshList))
+	RefreshList()
+end)
+
+-- ==================== Item Spawner System ====================
+pcall(function()
+	local SearchItem = AddInput(TabItem, "🔍 ค้นหาไอเทม (สแกนลึก)...", function() end)
+	local itemHolder = Instance.new("ScrollingFrame", TabItem)
+	itemHolder.Size = UDim2.new(1, -4, 0, 150)
+	itemHolder.BackgroundTransparency = 1
+	itemHolder.CanvasSize = UDim2.new(0, 0, 0, 0)
+	itemHolder.ScrollBarThickness = 2
+
+	local itemLayout = Instance.new("UIListLayout", itemHolder)
+	itemLayout.Padding = UDim.new(0, 4)
+	itemLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		itemHolder.CanvasSize = UDim2.new(0, 0, 0, itemLayout.AbsoluteContentSize.Y + 10)
+	end)
+
+	local function SpawnItem(obj)
+		pcall(function()
+			local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+			if obj and backpack then
+				local clone = obj:Clone()
+				if clone:IsA("Tool") or clone:IsA("Model") then
+					clone.Parent = backpack
+				end
+			end
+		end)
+	end
+
+	local function RefreshItemList()
+		pcall(function()
+			for _, c in ipairs(itemHolder:GetChildren()) do
+				if c:IsA("Frame") then c:Destroy() end
+			end
+			local filter = string.lower(SearchItem.Text)
+			
+			local scannedItems = {}
+			local function scanFolder(folder)
+				for _, descendant in ipairs(folder:GetDescendants()) do
+					if descendant:IsA("Tool") then
+						table.insert(scannedItems, descendant)
+					end
+				end
+			end
+			
+			pcall(function() scanFolder(ReplicatedStorage) end)
+			pcall(function() scanFolder(StarterPack) end)
+
+			for _, itemObj in ipairs(scannedItems) do
+				local itemName = itemObj.Name
+				if filter == "" or string.find(string.lower(itemName), filter, 1, true) then
+					local itemFrame = Instance.new("Frame", itemHolder)
+					itemFrame.Size = UDim2.new(1, 0, 0, 36)
+					itemFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+					Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 5)
+
+					local lbl = Instance.new("TextLabel", itemFrame)
+					lbl.Size = UDim2.new(1, -50, 1, 0)
+					lbl.Position = UDim2.new(0, 6, 0, 0)
+					lbl.BackgroundTransparency = 1
+					lbl.TextColor3 = Color3.new(1, 1, 1)
+					lbl.Font = Enum.Font.Gotham
+					lbl.TextSize = 10
+					lbl.Text = string.format("📦 %s", itemName)
+					lbl.TextXAlignment = Enum.TextXAlignment.Left
+
+					local spawnBtn = Instance.new("TextButton", itemFrame)
+					spawnBtn.Size = UDim2.new(0, 42, 0, 24)
+					spawnBtn.Position = UDim2.new(1, -46, 0, 6)
+					spawnBtn.BackgroundColor3 = Color3.fromRGB(140, 70, 190)
+					spawnBtn.TextColor3 = Color3.new(1, 1, 1)
+					spawnBtn.Font = Enum.Font.GothamBold
+					spawnBtn.TextSize = 10
+					spawnBtn.Text = "เสก"
+					Instance.new("UICorner", spawnBtn).CornerRadius = UDim.new(0, 4)
+					spawnBtn.MouseButton1Click:Connect(function() SpawnItem(itemObj) end)
+				end
+			end
+		end)
+	end
+
+	RootCleanup:Add(SearchItem:GetPropertyChangedSignal("Text"):Connect(RefreshItemList))
+	RefreshItemList()
+end)
